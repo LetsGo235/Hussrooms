@@ -1,0 +1,1412 @@
+<!DOCTYPE html>
+<!--
+  LEVEL 0 + CAPTAIN CLARK
+  This HTML is the complete game source; the three supplied binary assets
+  are shipped alongside it in the companion ZIP (they cannot be included
+  literally in a readable source code block).
+  To run: from the extracted folder, execute `python -m http.server 8000`
+  then browse to http://localhost:8000/index.html
+  Three.js is imported from jsDelivr and requires an internet connection.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>LEVEL 0 — The Backrooms</title>
+<style>
+  *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#99916a;font-family:Arial,Helvetica,sans-serif}
+  canvas{display:block}#game{position:fixed;inset:0}
+  #vignette{pointer-events:none;position:fixed;inset:0;z-index:4;background:radial-gradient(ellipse at center,transparent 48%,rgba(30,28,12,.34) 100%)}
+  #hud{pointer-events:none;position:fixed;z-index:5;inset:0;color:#e6e0bd;font-family:monospace;font-size:12px;letter-spacing:2px;text-shadow:0 1px 3px #262313;opacity:.55}
+  #status{position:absolute;left:22px;top:21px}#record{position:absolute;right:24px;top:21px}#record::before{content:"";display:inline-block;width:6px;height:6px;margin-right:9px;border-radius:50%;background:#c27564;animation:blink 1.8s step-end infinite}
+  #notice{position:absolute;bottom:21px;left:22px;font-size:10px;opacity:.65}
+  @keyframes blink{50%{opacity:.2}}
+  #entry{position:fixed;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;background:rgba(28,27,15,.46);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px);color:#ece8d2;text-align:center;cursor:pointer;user-select:none}
+  #entry.hidden{display:none}#panel{padding:38px 44px;max-width:520px;border:1px solid rgba(238,226,176,.22);background:rgba(32,31,17,.52);box-shadow:0 16px 90px #19170755}
+  #kicker{font:11px monospace;letter-spacing:5px;color:#c2bb93;margin-bottom:22px}h1{font-size:clamp(25px,5vw,46px);font-weight:400;letter-spacing:9px;line-height:1.2;margin:0 0 18px}#sub{font:12px/1.8 monospace;letter-spacing:1px;color:#cbc7a8;margin-bottom:29px}
+  #start{font:12px monospace;letter-spacing:3px;color:#eee4b5;border:1px solid #aa9e68;display:inline-block;padding:13px 22px}#help{margin:26px 0 0;font:11px/1.8 monospace;color:#a9a58b;letter-spacing:1px}
+  /* The menu button works with an unlocked cursor; B summons while playing. */
+  #spawnInMenu{display:inline-block;margin:14px 0 0;padding:13px 19px;border:1px solid #b3a472;
+    background:rgba(111,102,64,.25);color:#fff0bd;font:12px monospace;letter-spacing:2px;
+    cursor:pointer;min-height:44px;transition:background .15s,border-color .15s}
+  #spawnInMenu:hover:not(:disabled),#spawnInMenu:focus-visible{background:rgba(174,154,93,.35);border-color:#ded1a1}
+  #spawnInMenu:disabled{opacity:.45;cursor:wait}
+  #spawnInfo{min-height:15px;margin-top:10px;font:10px/1.5 monospace;letter-spacing:1.25px;color:#bdb798}
+  #summonHint{position:absolute;right:24px;bottom:21px;font:11px monospace;letter-spacing:1.25px;color:#ede4bd;
+    text-align:right;white-space:nowrap}
+  @media(max-width:600px){#summonHint{bottom:48px;right:22px}#notice{max-width:70%;line-height:1.6}}
+  #caught{position:fixed;inset:0;z-index:12;display:none;align-items:center;justify-content:center;
+    background:rgba(18,17,9,.91);color:#efe8c5;font:13px monospace;letter-spacing:5px;text-align:center;
+    text-shadow:3px 0 #6d3027,-2px 0 #424b27;cursor:pointer}
+  #caught.visible{display:flex}
+  #caught strong{display:block;font:30px monospace;letter-spacing:11px;margin-bottom:20px}
+  #caught small{display:block;letter-spacing:2px;opacity:.65;margin-top:28px}
+</style>
+</head>
+<body>
+<div id="game"></div><div id="vignette"></div>
+<div id="hud"><div id="status">LEVEL 0 &nbsp; / &nbsp; NO SIGNAL</div><div id="record">REC <span id="clock">00:00:00</span></div><div id="notice">WASD / ARROWS · MOUSE LOOK · SHIFT · M MUTE · ESC PAUSE</div><div id="summonHint">B — SPAWN CAPTAIN CLARK</div></div>
+<div id="caught"><div><strong>YOU WERE FOUND</strong>THERE IS NO EXIT<small>CLICK TO TRY AGAIN</small></div></div>
+<div id="entry"><div id="panel"><div id="kicker">UNIDENTIFIED LOCATION</div><h1>THE BACKROOMS</h1><div id="sub">If you're not careful, you might end up here.<br>The lights won't stop humming.</div><div id="start">CLICK TO ENTER</div><br><button type="button" id="spawnInMenu" disabled>SPAWN CAPTAIN CLARK</button><div id="spawnInfo" role="status" aria-live="polite">LOADING MONSTER MODEL...</div><div id="help">WASD / ARROWS — MOVE &nbsp;·&nbsp; MOUSE — LOOK<br>HOLD SHIFT — BOOK IT &nbsp;·&nbsp; ESC — PAUSE<br>HEADPHONES RECOMMENDED</div></div></div>
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {FBXLoader} from 'three/addons/loaders/FBXLoader.js';
+
+// The shipped ZIP places these THREE binary assets next to index.html.
+// Opening via localhost is required: file:// is not a valid fetch origin.
+const ASSETS = Object.freeze({
+  model: './captain_clark_rigged_fixed.glb',
+  hunt: './Standing Melee Punch.fbx',
+  chase: './Fast Run.fbx'
+});
+
+// All images, room geometry, sounds, and the camera treatment are generated locally.
+const CELL=3.6, N=6, SIDE=CELL*N, HEIGHT=2.64, EYE=1.62, RADIUS=.29;
+const VIEW_CHUNKS=3, WALL_THICK=.20;
+const app=document.getElementById('game'), entry=document.getElementById('entry');
+const timecode=document.getElementById('clock'), status=document.getElementById('status');
+const spawnInMenu=document.getElementById('spawnInMenu');
+const spawnInfo=document.getElementById('spawnInfo');
+
+const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance',alpha:false});
+renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5));
+renderer.setSize(innerWidth,innerHeight);
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.15;
+app.appendChild(renderer.domElement);
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0xa9a37a);
+scene.fog=new THREE.FogExp2(0xa9a37a,.032);
+scene.add(new THREE.HemisphereLight(0xfff9da,0x6e654b,1.55));
+scene.add(new THREE.AmbientLight(0xfff5d0,.38));
+const camera=new THREE.PerspectiveCamera(76,innerWidth/innerHeight,.06,105);
+camera.rotation.order='YXZ';
+camera.position.set(SIDE/2,EYE,SIDE/2);
+// Look angles now live in PlayerController. Camera offsets never move the collision body.
+
+function rng(seed){let s=seed>>>0;return()=>{s=(s+0x6D2B79F5)|0;let t=Math.imul(s^(s>>>15),1|s);t^=t+Math.imul(t^(t>>>7),61|t);return ((t^(t>>>14))>>>0)/4294967296;};}
+function hash(x,z,salt=0){let h=Math.imul(x,0x9e3779b1)^Math.imul(z,0x85ebca77)^Math.imul(salt+17,0xc2b2ae3d);h=Math.imul(h^(h>>>16),0x7feb352d);h=Math.imul(h^(h>>>15),0x846ca68b);return (h^(h>>>16))>>>0;}
+
+// Repeatable carpet, fibrous wallpaper, and mineral ceiling tiles.
+function textureCanvas(size,paint){let canvas=document.createElement('canvas');canvas.width=canvas.height=size;let c=canvas.getContext('2d');paint(c,size);return canvas;}
+function makeTexture(canvas,repeatX,repeatY){let t=new THREE.CanvasTexture(canvas);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(repeatX,repeatY);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=Math.min(renderer.capabilities.getMaxAnisotropy(),8);return t;}
+const wallCanvas=textureCanvas(512,(ctx,s)=>{
+  const rand=rng(128),d=ctx.createImageData(s,s);
+  for(let y=0;y<s;y++)for(let x=0;x<s;x++){
+    let i=(y*s+x)*4, n=(rand()-.5)*14+Math.sin(x*.12)*1.2+Math.sin(y*.037+x*.025)*2;
+    d.data[i]=199+n;d.data[i+1]=194+n*.95;d.data[i+2]=135+n*.7;d.data[i+3]=255;
+  }
+  ctx.putImageData(d,0,0);
+  // Faint, imperfect damask shapes (visible only when looking closely).
+  ctx.lineWidth=2.2;ctx.strokeStyle='rgba(105,103,69,.075)';
+  for(let j=-1;j<5;j++)for(let i=-1;i<5;i++){
+    let x=i*142+69,y=j*181+83;
+    ctx.beginPath();ctx.moveTo(x,y-57);ctx.bezierCurveTo(x-43,y-30,x-30,y-7,x,y+22);ctx.bezierCurveTo(x+30,y-7,x+43,y-30,x,y-57);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(x,y-20);ctx.bezierCurveTo(x-31,y+5,x-16,y+42,x,y+58);ctx.bezierCurveTo(x+16,y+42,x+31,y+5,x,y-20);ctx.stroke();
+    for(let side of [-1,1]){ctx.beginPath();ctx.moveTo(x,y+9);ctx.bezierCurveTo(x+side*44,y+1,x+side*29,y-36,x+side*17,y-13);ctx.stroke();}
+  }
+  for(let x=0;x<s;x+=71){ctx.fillStyle='rgba(91,91,67,.025)';ctx.fillRect(x,0,2,s);}
+});
+const carpetCanvas=textureCanvas(512,(ctx,s)=>{
+  const r=rng(7141),d=ctx.createImageData(s,s);
+  for(let y=0;y<s;y++)for(let x=0;x<s;x++){
+    const i=(y*s+x)*4,n=(r()-.5)*41+(r()-.5)*19+Math.sin((x+y*.6)*.22)*2;
+    d.data[i]=133+n;d.data[i+1]=126+n*.94;d.data[i+2]=96+n*.75;d.data[i+3]=255;
+  }
+  ctx.putImageData(d,0,0);
+  for(let i=0;i<23000;i++){
+    let x=r()*s,y=r()*s;
+    ctx.strokeStyle=r()<.5?'rgba(53,49,34,.14)':'rgba(224,211,165,.14)';
+    ctx.lineWidth=.45+r()*.65;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+(r()-.5)*3,y+1+r()*4);ctx.stroke();
+  }
+});
+const ceilingCanvas=textureCanvas(256,(ctx,s)=>{
+  const r=rng(99),d=ctx.createImageData(s,s);
+  for(let y=0;y<s;y++)for(let x=0;x<s;x++){
+    let i=(y*s+x)*4,n=(r()-.5)*11+Math.sin(x*.027+y*.033)*1.8;
+    d.data[i]=184+n;d.data[i+1]=182+n;d.data[i+2]=159+n;d.data[i+3]=255;
+  }
+  ctx.putImageData(d,0,0);
+  ctx.strokeStyle='rgba(95,91,73,.49)';ctx.lineWidth=3;ctx.strokeRect(1.5,1.5,s-3,s-3);
+  ctx.strokeStyle='rgba(245,234,199,.18)';ctx.lineWidth=2;ctx.strokeRect(5,5,s-10,s-10);
+});
+const wallTex=makeTexture(wallCanvas,1,1), carpetTex=makeTexture(carpetCanvas,SIDE/1.22,SIDE/1.22);
+const ceilingTex=makeTexture(ceilingCanvas,SIDE/.72,SIDE/.72);
+const wallMats=[0xffffff,0xf4f2d5,0xe9eac8,0xfaf2d7].map(tint=>new THREE.MeshStandardMaterial({map:wallTex,color:tint,roughness:1,side:THREE.DoubleSide}));
+const carpetMat=new THREE.MeshStandardMaterial({map:carpetTex,roughness:1,metalness:0});
+const ceilingMat=new THREE.MeshStandardMaterial({map:ceilingTex,roughness:1,side:THREE.DoubleSide});
+const trimMat=new THREE.MeshStandardMaterial({color:0x8f8259,roughness:1,side:THREE.DoubleSide});
+const litMat=new THREE.MeshBasicMaterial({color:0xfffdeb,side:THREE.DoubleSide});
+const edgeMat=new THREE.MeshBasicMaterial({color:0xc6b995,side:THREE.DoubleSide});
+const blackMat=new THREE.MeshBasicMaterial({color:0x25251d,side:THREE.DoubleSide});
+const shadowMat=new THREE.ShaderMaterial({transparent:true,depthWrite:false,side:THREE.DoubleSide,
+  vertexShader:`varying vec2 vUv; void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+  fragmentShader:`varying vec2 vUv; void main(){gl_FragColor=vec4(.095,.080,.048,.29*(1.-smoothstep(0.,1.,vUv.y)));}`});
+
+// Geometry batching: each entire chunk uses a handful of draw calls.
+class Batch{
+  constructor(){this.p=[];this.n=[];this.uv=[];}
+  quad(a,b,c,d,normal,u=1,v=1,overrideUV=null){
+    const pts=[a,b,c,a,c,d],uv=overrideUV||[[0,0],[u,0],[u,v],[0,v]];
+    const uvs=[uv[0],uv[1],uv[2],uv[0],uv[2],uv[3]];
+    for(let i=0;i<6;i++){this.p.push(...pts[i]);this.n.push(...normal);this.uv.push(...uvs[i]);}
+  }
+  box(x,y,z,w,h,d){
+    const a=x-w/2,b=x+w/2,l=y-h/2,t=y+h/2,c=z-d/2,e=z+d/2;
+    const v=h/2.55;
+    this.quad([a,l,e],[b,l,e],[b,t,e],[a,t,e],[0,0,1],w/1.65,v);
+    this.quad([b,l,c],[a,l,c],[a,t,c],[b,t,c],[0,0,-1],w/1.65,v);
+    this.quad([b,l,e],[b,l,c],[b,t,c],[b,t,e],[1,0,0],d/1.65,v);
+    this.quad([a,l,c],[a,l,e],[a,t,e],[a,t,c],[-1,0,0],d/1.65,v);
+    this.quad([a,t,e],[b,t,e],[b,t,c],[a,t,c],[0,1,0],w/1.65,d/1.65);
+    this.quad([a,l,c],[b,l,c],[b,l,e],[a,l,e],[0,-1,0],w/1.65,d/1.65);
+  }
+  mesh(material){if(!this.p.length)return null;const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(this.p,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(this.n,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(this.uv,2));g.computeBoundingSphere();return new THREE.Mesh(g,material);}
+}
+function stripShadows(batch,x,z,w,d){
+  const y=.012,spread=.46;
+  if(w>d){
+    for(let dir of [-1,1]){
+      const near=z+dir*d*.5,far=near+dir*spread;
+      batch.quad([x-w/2,y,near],[x+w/2,y,near],[x+w/2,y,far],[x-w/2,y,far],[0,1,0],1,1,[[0,0],[1,0],[1,1],[0,1]]);
+    }
+  }else{
+    for(let dir of [-1,1]){
+      const near=x+dir*w*.5,far=near+dir*spread;
+      batch.quad([near,y,z-d/2],[near,y,z+d/2],[far,y,z+d/2],[far,y,z-d/2],[0,1,0],1,1,[[0,0],[1,0],[1,1],[0,1]]);
+    }
+  }
+}
+
+// Three explicitly authored, repeatable exceptions to the ordinary layout grammar.
+const HERO_ROOMS=[
+  {name:'The Pillar Gallery',walls:[['v',2,0,2],['v',4,3,2],['h',3,0,2],['h',2,4,2]],
+   pillars:[[1.35,1.5,.82,1.05],[4.45,1.65,.78,.82],[4.5,4.65,.98,.98]],soffits:[]},
+  {name:'The Offset Hall',walls:[['v',3,0,3],['h',4,0,3],['v',5,2,3],['h',2,3,2],['h',5,3,2]],
+   pillars:[[1.55,2.2,.68,.78]],soffits:[]},
+  {name:'The Lowered Room',walls:[['h',2,0,3],['v',4,2,3],['h',5,2,3]],
+   pillars:[[1.6,4.2,.8,.8],[4.8,1.1,.8,.8]],soffits:[[1.7,4.0,3.2,3.8],[4.55,4.4,2.1,2.7]]}
+];
+// Boundary portal = pure function of a SHARED edge, never of the local chunk.
+function portalX(boundaryX,cz){return 1+hash(boundaryX,cz,91)%4;}
+function portalZ(cx,boundaryZ){return 1+hash(cx,boundaryZ,93)%4;}
+const chunks=new Map();let playerChunkX=NaN,playerChunkZ=NaN;
+function key(cx,cz){return `${cx},${cz}`;}
+function buildChunk(cx,cz){
+  const originX=cx*SIDE,originZ=cz*SIDE,rand=rng(hash(cx,cz,376));
+  const group=new THREE.Group();group.position.set(originX,0,originZ);
+  const walls=new Batch(),trims=new Batch(),shadows=new Batch();
+  const panels=new Batch(),frames=new Batch(),holes=new Batch(),soffits=new Batch();
+  const colliders=[],lamps=[];
+  let hero=-1;
+  if(cx===0&&cz===0)hero=0;
+  else if(cx===2&&cz===0)hero=1;
+  else if(cx===-1&&cz===2)hero=2;
+  else if(hash(cx,cz,555)%31===0)hero=hash(cx,cz,556)%3;
+  const wallTone=hero===2?1:Math.floor(rand()*wallMats.length);
+  function solid(x,z,w,d,height=HEIGHT,collide=true){
+    walls.box(x,height/2,z,w,height,d);
+    if(collide){
+      trims.box(x,.064,z,w+.035,.128,d+.035);
+      stripShadows(shadows,x,z,w,d);
+      colliders.push({minX:originX+x-w/2,maxX:originX+x+w/2,minZ:originZ+z-d/2,maxZ:originZ+z+d/2});
+    }
+  }
+  // Every edge contains a deterministic opening matched exactly by its neighbor.
+  const west=portalX(cx,cz),east=portalX(cx+1,cz),north=portalZ(cx,cz),south=portalZ(cx,cz+1);
+  for(let i=0;i<N;i++){
+    if(i!==north)solid((i+.5)*CELL,.09,CELL+.015,.18);
+    if(i!==south)solid((i+.5)*CELL,SIDE-.09,CELL+.015,.18);
+    if(i!==west)solid(.09,(i+.5)*CELL,.18,CELL+.015);
+    if(i!==east)solid(SIDE-.09,(i+.5)*CELL,.18,CELL+.015);
+  }
+  // Units of blocking are full wall-bays; compress adjacent bays into long walls.
+  const blocked=new Set();
+  const setEdge=(axis,line,index)=>{if(line>=1&&line<=N-1&&index>=0&&index<N)blocked.add(`${axis}|${line}|${index}`);};
+  function span(axis,line,start,count){for(let j=start;j<start+count;j++)setEdge(axis,line,j);}
+  if(hero!==-1){for(const [axis,line,start,count] of HERO_ROOMS[hero].walls)span(axis,line,start,count);}
+  else{
+    const style=Math.floor(rand()*4);
+    // Grammars: divided open plan, two parallel passages, offset offices, vast empty room.
+    if(style===0){span('v',2,0,4);span('h',4,2,3);span('v',5,2,3);}
+    if(style===1){span('v',2,0,5);span('v',4,1,5);span('h',2,0,2);}
+    if(style===2){span('h',2,0,4);span('v',4,1,4);span('h',5,3,3);}
+    if(style===3){span('h',4,0,2);span('v',4,3,2);}
+    let extra=style===3?2:3+Math.floor(rand()*4);
+    for(let i=0;i<extra;i++){
+      let axis=rand()<.5?'v':'h',line=1+Math.floor(rand()*5),start=Math.floor(rand()*5);
+      span(axis,line,start,1+Math.floor(rand()*Math.min(4,6-start)));
+    }
+  }
+  // Enforce reachability of EVERY bay: isolated rooms gain subtle doorway gaps.
+  const neighbors=(x,z)=>[
+    [x-1,z,`v|${x}|${z}`],[x+1,z,`v|${x+1}|${z}`],
+    [x,z-1,`h|${z}|${x}`],[x,z+1,`h|${z+1}|${x}`]
+  ].filter(([a,b])=>a>=0&&a<N&&b>=0&&b<N);
+  function flood(){const visited=new Set(['3,3']),queue=[[3,3]];for(let i=0;i<queue.length;i++){
+    for(const [x,z,k] of neighbors(...queue[i])){const c=`${x},${z}`;if(!visited.has(c)&&!blocked.has(k)){visited.add(c);queue.push([x,z]);}}
+  }return visited;}
+  let reachable=flood();
+  while(reachable.size<N*N){
+    const candidates=[];
+    for(const id of reachable){const [x,z]=id.split(',').map(Number);for(const [nx,nz,k] of neighbors(x,z))if(!reachable.has(`${nx},${nz}`)&&blocked.has(k))candidates.push(k);}
+    if(!candidates.length)break;
+    blocked.delete(candidates[Math.floor(rand()*candidates.length)]);reachable=flood();
+  }
+  for(const axis of ['h','v'])for(let line=1;line<N;line++){
+    let start=-1;
+    for(let i=0;i<=N;i++){
+      const filled=i<N&&blocked.has(`${axis}|${line}|${i}`);
+      if(filled&&start===-1)start=i;
+      if(!filled&&start!==-1){
+        const run=i-start;
+        if(axis==='h')solid((start+run/2)*CELL,line*CELL,run*CELL+.02,WALL_THICK);
+        else solid(line*CELL,(start+run/2)*CELL,WALL_THICK,run*CELL+.02);
+        start=-1;
+      }
+    }
+  }
+  if(hero!==-1){
+    for(const [gx,gz,w,d] of HERO_ROOMS[hero].pillars)solid(gx*CELL,gz*CELL,w,d);
+    for(const [gx,gz,w,d] of HERO_ROOMS[hero].soffits){
+      const x=gx*CELL,z=gz*CELL,lower=2.23;
+      soffits.box(x,(HEIGHT+lower)/2,z,w*CELL,HEIGHT-lower,d*CELL);
+      // The vertical fascia emphasizes the ceiling's unnatural change in height.
+      frames.box(x,lower-.012,z,w*CELL+.07,.035,d*CELL+.07);
+    }
+  }else{
+    // Occasional columns and blank architectural appendages, not collectibles.
+    if(rand()<.34){let px=(1+Math.floor(rand()*4)+.5)*CELL,pz=(1+Math.floor(rand()*4)+.5)*CELL;
+      solid(px,pz,.65+rand()*.4,.65+rand()*.45);
+    }
+  }
+  // Use shared floor/ceiling geometry. The diffuse ceiling texture supplies grout lines.
+  const floor=new THREE.Mesh(new THREE.PlaneGeometry(SIDE,SIDE),carpetMat);
+  floor.rotation.x=-Math.PI/2;floor.position.set(SIDE/2,0,SIDE/2);group.add(floor);
+  const roof=new THREE.Mesh(new THREE.PlaneGeometry(SIDE,SIDE),ceilingMat);
+  roof.rotation.x=Math.PI/2;roof.position.set(SIDE/2,HEIGHT,SIDE/2);group.add(roof);
+  // 6 fixtures per chunk, in a consistent commercial 1970s drop-ceiling rhythm.
+  for(let iz=0;iz<2;iz++)for(let ix=0;ix<3;ix++){
+    const x=(1+ix*2)*CELL,z=(1.55+iz*2.95)*CELL;
+    const active=hash(cx*13+ix,cz*13+iz,47)%16!==0;
+    frames.box(x,HEIGHT-.026,z,1.61,.05,.80);
+    if(active){
+      panels.quad([x-.72,HEIGHT-.059,z-.34],[x+.72,HEIGHT-.059,z-.34],[x+.72,HEIGHT-.059,z+.34],[x-.72,HEIGHT-.059,z+.34],[0,-1,0]);
+      lamps.push({x:originX+x,z:originZ+z,y:HEIGHT-.10});
+    }else{
+      holes.quad([x-.72,HEIGHT-.06,z-.34],[x+.72,HEIGHT-.06,z-.34],[x+.72,HEIGHT-.06,z+.34],[x-.72,HEIGHT-.06,z+.34],[0,-1,0]);
+    }
+  }
+  // Rare missing tile (one of the visual cues from the dark reference room).
+  if(hash(cx,cz,207)%5===0){const x=(.5+(hash(cx,cz,209)%N))*CELL,z=(.5+(hash(cx,cz,210)%N))*CELL;
+    holes.quad([x-.31,HEIGHT-.024,z-.31],[x+.31,HEIGHT-.024,z-.31],[x+.31,HEIGHT-.024,z+.31],[x-.31,HEIGHT-.024,z+.31],[0,-1,0]);
+  }
+  for(const [b,m] of [[walls,wallMats[wallTone]],[trims,trimMat],[shadows,shadowMat],[panels,litMat],[frames,edgeMat],[holes,blackMat],[soffits,ceilingMat]]){
+    const mesh=b.mesh(m);if(mesh)group.add(mesh);
+  }
+  scene.add(group);
+  return {cx,cz,group,colliders,lamps,hero,blocked};
+}
+function updateChunks(force=false, worldX=camera.position.x, worldZ=camera.position.z){
+  const cx=Math.floor(worldX/SIDE),cz=Math.floor(worldZ/SIDE);
+  if(!force&&cx===playerChunkX&&cz===playerChunkZ)return;
+  playerChunkX=cx;playerChunkZ=cz;
+  for(let dz=-VIEW_CHUNKS;dz<=VIEW_CHUNKS;dz++)for(let dx=-VIEW_CHUNKS;dx<=VIEW_CHUNKS;dx++){
+    const x=cx+dx,z=cz+dz,k=key(x,z);
+    if(!chunks.has(k))chunks.set(k,buildChunk(x,z));
+  }
+  for(const [k,c] of chunks){if(Math.abs(c.cx-cx)>VIEW_CHUNKS||Math.abs(c.cz-cz)>VIEW_CHUNKS){
+    scene.remove(c.group);c.group.traverse(obj=>{if(obj.isMesh&&obj.geometry!==undefined)obj.geometry.dispose();});chunks.delete(k);
+  }}
+}
+function collides(x,z,radius=RADIUS){
+  const cx=Math.floor(x/SIDE),cz=Math.floor(z/SIDE);
+  for(let oz=-1;oz<=1;oz++)for(let ox=-1;ox<=1;ox++){
+    const c=chunks.get(key(cx+ox,cz+oz));if(!c)continue;
+    for(const b of c.colliders){
+      const nearX=Math.max(b.minX,Math.min(x,b.maxX)),nearZ=Math.max(b.minZ,Math.min(z,b.maxZ));
+      if((x-nearX)**2+(z-nearZ)**2<radius*radius)return true;
+    }
+  }
+  return false;
+}
+
+// Only the nearest few lamps get real dynamic lights; distant lamps stay emissive.
+const nearestLights=Array.from({length:9},()=>{
+  const p=new THREE.PointLight(0xfff4c3,15,10.5,2);
+  p.visible=false;scene.add(p);return p;
+});
+let lightTimer=0,nearestDistance=99;
+function updateLighting(dt,elapsed){
+  lightTimer-=dt;if(lightTimer>0)return;lightTimer=.17;
+  const candidates=[];
+  for(const chunk of chunks.values())for(const lamp of chunk.lamps){
+    const dx=lamp.x-camera.position.x,dz=lamp.z-camera.position.z;
+    const d2=dx*dx+dz*dz;
+    if(d2<225)candidates.push({lamp,d2});
+  }
+  candidates.sort((a,b)=>a.d2-b.d2);
+  nearestDistance=candidates.length?Math.sqrt(candidates[0].d2):99;
+  nearestLights.forEach((p,i)=>{
+    const item=candidates[i];p.visible=!!item;
+    if(item){p.position.set(item.lamp.x,item.lamp.y-.18,item.lamp.z);p.intensity=15*(.97+.03*Math.sin(elapsed*6.5+i*1.8));}
+  });
+}
+
+// Simple VHS / early-digitized-video treatment: restrained chromatic split, grain, scanline and falloff.
+const postScene=new THREE.Scene(),postCamera=new THREE.OrthographicCamera(-1,1,1,-1,0,1);
+const target=new THREE.WebGLRenderTarget(1,1,{minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,depthBuffer:true});
+const postMat=new THREE.ShaderMaterial({depthTest:false,depthWrite:false,toneMapped:false,uniforms:{
+  tDiffuse:{value:target.texture},uTime:{value:0},uSize:{value:new THREE.Vector2(1,1)},uThreat:{value:0},uStrike:{value:0}
+},vertexShader:`varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}`,
+fragmentShader:`
+  uniform sampler2D tDiffuse;uniform float uTime;uniform vec2 uSize;uniform float uThreat;uniform float uStrike;varying vec2 vUv;
+  float hash21(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123);}
+  void main(){
+    vec2 p=vUv-.5;
+    vec2 uv=vUv+p*dot(p,p)*.006;
+    // Close-range monster field interference. Ordinary VHS visuals unchanged at 0.
+    float threat=clamp(uThreat+uStrike,0.,1.);
+    float line=floor(vUv.y*165.);
+    float jitter=hash21(vec2(line,floor(uTime*23.)))-.5;
+    float band=step(.88,hash21(vec2(line*.23,floor(uTime*13.))));
+    uv.x+=jitter*band*threat*.042;
+    uv.y+=sin(uTime*31.+vUv.y*83.)*threat*.0014;
+    vec2 offset=vec2(.00060+.0018*dot(p,p)+threat*.006,0.);
+    vec3 color=vec3(texture2D(tDiffuse,uv+offset).r,texture2D(tDiffuse,uv).g,texture2D(tDiffuse,uv-offset).b);
+    float luma=dot(color,vec3(.299,.587,.114));
+    color=mix(color,vec3(luma),.12);
+    float grain=hash21(floor(vUv*uSize*.73)+floor(uTime*19.))-.5;
+    float scan=sin(vUv.y*uSize.y*.71)*.004;
+    color=clamp(color+grain*(.035+threat*.19)+scan,0.,1.);
+    color=color*.963+.012;
+    // Invasive double-vision and harsh signal tears only when very close.
+    vec3 ghost=texture2D(tDiffuse,clamp(uv+vec2(.022*threat,0.),0.,1.)).rgb;
+    color=mix(color,ghost,threat*.20);
+    float tear=step(.95,hash21(vec2(floor(vUv.y*112.),floor(uTime*37.))));
+    color=mix(color,color*vec3(.53,.64,.47),tear*threat*.44);
+    color+=vec3(.06,-.018,-.035)*threat*fract(sin(uTime*41.)*346.73);
+    float vignette=1.-.28*smoothstep(.18,.72,length(p*vec2(1.05,.91)));
+    gl_FragColor=vec4(color*vignette,1.);
+    #include <colorspace_fragment>
+  }`});
+const screenQuad=new THREE.Mesh(new THREE.PlaneGeometry(2,2),postMat);
+postScene.add(screenQuad);
+function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
+  const w=Math.max(1,Math.floor(innerWidth*renderer.getPixelRatio())),h=Math.max(1,Math.floor(innerHeight*renderer.getPixelRatio()));
+  target.setSize(w,h);postMat.uniforms.uSize.value.set(w,h);
+}
+addEventListener('resize',resize);resize();
+
+// ============================================================
+// KINETIC PLAYER AND AUDIO — the building generator above is unchanged.
+// ============================================================
+
+const MOVE = Object.freeze({
+  walkSpeed: 2.15,
+  sprintSpeed: 8.35,           // 3.88x ordinary walking pace
+  sprintAcceleration: 24.0,  // reaches full panic speed in ~0.4 seconds
+  walkAcceleration: 13.0,
+  turningAcceleration: 16.5, // opposing momentum takes longer to cancel
+  carpetBraking: 12.6,       // glide forward when controls are released
+  baseFov: 76,
+  sprintFov: 104,
+  maxMoveStep: 0.12           // swept-substep collision: no tunneling
+});
+
+let audioCtx = null;
+let humA = null, humB = null, humGain = null, hissGain = null;
+let windGain = null, windFilter = null, mix = null, stepNoise = null;
+let muted = false;
+
+function createAudio() {
+  if (audioCtx) { audioCtx.resume(); return; }
+  const Context = window.AudioContext || window.webkitAudioContext;
+  if (!Context) return;
+
+  audioCtx = new Context();
+  mix = audioCtx.createDynamicsCompressor();
+  mix.threshold.value = -18;
+  mix.ratio.value = 2;
+  mix.connect(audioCtx.destination);
+
+  // Existing two-layer fluorescent hum.
+  humGain = audioCtx.createGain();
+  humGain.gain.value = 0.032;
+  humGain.connect(mix);
+  humA = audioCtx.createOscillator();
+  humA.type = 'sine';
+  humA.frequency.value = 59.4;
+  humB = audioCtx.createOscillator();
+  humB.type = 'sawtooth';
+  humB.frequency.value = 119.2;
+  const gainA = audioCtx.createGain();
+  const gainB = audioCtx.createGain();
+  gainA.gain.value = 0.35;
+  gainB.gain.value = 0.045;
+  humA.connect(gainA).connect(humGain);
+  humB.connect(gainB).connect(humGain);
+  humA.start(); humB.start();
+
+  const length = audioCtx.sampleRate * 2;
+  stepNoise = audioCtx.createBuffer(1, length, audioCtx.sampleRate);
+  const channel = stepNoise.getChannelData(0), random = rng(93);
+  for (let i = 0; i < length; i++) channel[i] = random() * 2 - 1;
+
+  const hiss = audioCtx.createBufferSource();
+  hiss.buffer = stepNoise;
+  hiss.loop = true;
+  const hissFilter = audioCtx.createBiquadFilter();
+  hissFilter.type = 'bandpass';
+  hissFilter.frequency.value = 750;
+  hissFilter.Q.value = 0.24;
+  hissGain = audioCtx.createGain();
+  hissGain.gain.value = 0.007;
+  hiss.connect(hissFilter).connect(hissGain).connect(mix);
+  hiss.start();
+
+  // Constant low-passed air movement. It fades in with ACTUAL velocity,
+  // not simply the Shift key, and the cutoff brightens as speed increases.
+  const wind = audioCtx.createBufferSource();
+  wind.buffer = stepNoise;
+  wind.loop = true;
+  const windHighpass = audioCtx.createBiquadFilter();
+  windHighpass.type = 'highpass';
+  windHighpass.frequency.value = 65;
+  windFilter = audioCtx.createBiquadFilter();
+  windFilter.type = 'lowpass';
+  windFilter.frequency.value = 240;
+  windGain = audioCtx.createGain();
+  windGain.gain.value = 0;
+  wind.connect(windHighpass).connect(windFilter).connect(windGain).connect(mix);
+  wind.start();
+}
+
+function footstep(sprintAmount) {
+  if (!audioCtx || muted || !stepNoise) return;
+  const now = audioCtx.currentTime;
+  const power = THREE.MathUtils.clamp(sprintAmount, 0, 1);
+
+  // Carpet scrape / crunch: faster, brighter and MUCH heavier at sprint.
+  const source = audioCtx.createBufferSource();
+  source.buffer = stepNoise;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 145 + power * 230 + Math.random() * 90;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(0.13 + power * 0.25, now + 0.009);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.19 - power * 0.05);
+  source.connect(filter).connect(gain).connect(mix);
+  source.start(now, Math.random() * 1.6, 0.22);
+
+  // Dull impact under each footfall. Stronger on the panicked sprint.
+  const thud = audioCtx.createOscillator();
+  const thudGain = audioCtx.createGain();
+  thud.type = 'sine';
+  thud.frequency.setValueAtTime(91 + power * 23, now);
+  thud.frequency.exponentialRampToValueAtTime(48, now + 0.11);
+  thudGain.gain.setValueAtTime(0.0001, now);
+  thudGain.gain.exponentialRampToValueAtTime(0.024 + power * 0.055, now + 0.014);
+  thudGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+  thud.connect(thudGain).connect(mix);
+  thud.start(now);
+  thud.stop(now + 0.15);
+}
+
+function collisionThump(strength) {
+  if (!audioCtx || muted) return;
+  const now = audioCtx.currentTime;
+  const impact = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  impact.type = 'sine';
+  impact.frequency.setValueAtTime(66, now);
+  impact.frequency.exponentialRampToValueAtTime(33, now + 0.12);
+  gain.gain.setValueAtTime(0.001, now);
+  gain.gain.exponentialRampToValueAtTime(0.035 * strength, now + 0.012);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+  impact.connect(gain).connect(mix);
+  impact.start(now);
+  impact.stop(now + 0.19);
+}
+
+function updateAudio(speed, active) {
+  if (!audioCtx) return;
+  const now = audioCtx.currentTime;
+  const near = THREE.MathUtils.clamp(1 - nearestDistance / 9, 0, 1);
+  const rush = THREE.MathUtils.clamp(
+    (speed - MOVE.walkSpeed * 0.7) / (MOVE.sprintSpeed - MOVE.walkSpeed * 0.7),
+    0, 1
+  );
+  const enabled = active && !muted;
+  humGain.gain.setTargetAtTime(enabled ? 0.029 + near * 0.033 : 0, now, 0.12);
+  humA.frequency.setTargetAtTime(59.4 + near * 0.62, now, 0.25);
+  humB.frequency.setTargetAtTime(119.2 + near * 0.8, now, 0.25);
+  hissGain.gain.setTargetAtTime(enabled ? 0.006 + near * 0.003 : 0, now, 0.13);
+  windGain.gain.setTargetAtTime(enabled ? 0.155 * rush * rush : 0, now, 0.07);
+  windFilter.frequency.setTargetAtTime(240 + rush * 1060, now, 0.12);
+}
+
+// ============================================================
+// MOMENTUM-BASED FIRST-PERSON PLAYER
+// ============================================================
+
+const held = new Set();
+const pressed = (...names) => names.some(name => held.has(name));
+let playing = false;
+
+class PlayerController {
+  constructor(camera) {
+    this.camera = camera;
+    // True physical body stays independent from visual shake/lean.
+    this.position = new THREE.Vector2(SIDE / 2, SIDE / 2);
+    this.velocity = new THREE.Vector2();
+    this.yaw = 0.12;
+    this.pitch = -0.035;
+    this.turnInput = 0;
+    this.roll = 0;
+    this.stepPhase = 0;
+    this.stepDistance = 0;
+    this.stepKick = 0;
+    this.crashKick = 0;
+    this.crashCooldown = 0;
+    this.speed = 0;
+    this.sprintAmount = 0;
+
+    // PUBLIC MONSTER-HEARING HOOK — read window.backroomsPlayer.noiseLevel
+    // 0 = stationary/silent; 1 = walking; 5 = sprinting OR still sliding fast.
+    // Updated from REAL body speed after collision, never merely key presses.
+    this.noiseLevel = 0;
+  }
+
+  look(dx, dy) {
+    this.yaw -= dx * 0.00185;
+    this.pitch = THREE.MathUtils.clamp(
+      this.pitch - dy * 0.00185, -1.45, 1.45
+    );
+    this.turnInput += -dx * 0.00185;
+  }
+
+  pause() {
+    this.velocity.set(0, 0);
+    this.speed = 0;
+    this.sprintAmount = 0;
+    this.noiseLevel = 0;
+    this.stepKick = 0;
+    this.crashKick = 0;
+    this.camera.fov = MOVE.baseFov;
+    this.camera.updateProjectionMatrix();
+    this.camera.position.set(this.position.x, EYE, this.position.y);
+    this.camera.rotation.set(this.pitch, this.yaw, 0);
+  }
+
+  update(dt, elapsed) {
+    const inputX = Number(pressed('d', 'arrowright')) - Number(pressed('a', 'arrowleft'));
+    const inputZ = Number(pressed('s', 'arrowdown')) - Number(pressed('w', 'arrowup'));
+    const local = new THREE.Vector2(inputX, inputZ);
+    const hasInput = local.lengthSq() > 0;
+    if (hasInput) local.normalize();
+    const sprint = pressed('shift') && hasInput;
+    const targetSpeed = sprint ? MOVE.sprintSpeed : MOVE.walkSpeed;
+    const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
+
+    // Desired velocity is camera-relative; acceleration works on the actual
+    // WORLD velocity instead of interpolating the direction instantaneously.
+    if (hasInput) {
+      const target = new THREE.Vector2(
+        (local.x * cos + local.y * sin) * targetSpeed,
+        (-local.x * sin + local.y * cos) * targetSpeed
+      );
+      const change = target.sub(this.velocity);
+      const opposing = this.velocity.lengthSq() > 0.01 &&
+        this.velocity.dot(change) < -this.velocity.length() * change.length() * 0.40;
+      const acceleration = opposing ? MOVE.turningAcceleration :
+        sprint ? MOVE.sprintAcceleration : MOVE.walkAcceleration;
+      change.clampLength(0, acceleration * dt);
+      this.velocity.add(change);
+    } else {
+      // Linear carpet friction leaves a visible skid after releasing controls.
+      const speed = this.velocity.length();
+      if (speed > 0) {
+        this.velocity.multiplyScalar(Math.max(0, 1 - MOVE.carpetBraking * dt / speed));
+      }
+    }
+    if (this.velocity.lengthSq() < 0.0009) this.velocity.set(0, 0);
+
+    // Collision-safe substeps at maximum running speed and during frame hitches.
+    const dx = this.velocity.x * dt, dz = this.velocity.y * dt;
+    const subdivisions = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dz)) / MOVE.maxMoveStep));
+    const sx = dx / subdivisions, sz = dz / subdivisions;
+    let travelled = 0, crash = 0;
+    for (let i = 0; i < subdivisions; i++) {
+      const ox = this.position.x, oz = this.position.y;
+      if (!collides(ox + sx, oz)) this.position.x += sx;
+      else { crash = Math.max(crash, Math.abs(this.velocity.x)); this.velocity.x = 0; }
+      if (!collides(this.position.x, oz + sz)) this.position.y += sz;
+      else { crash = Math.max(crash, Math.abs(this.velocity.y)); this.velocity.y = 0; }
+      travelled += Math.hypot(this.position.x - ox, this.position.y - oz);
+    }
+
+    this.crashCooldown = Math.max(0, this.crashCooldown - dt);
+    if (crash > 3.6 && this.crashCooldown === 0) {
+      this.crashKick = Math.min(1.35, this.crashKick + crash / MOVE.sprintSpeed);
+      this.crashCooldown = 0.3;
+      collisionThump(Math.min(1.5, crash / MOVE.sprintSpeed));
+    }
+
+    this.speed = this.velocity.length();
+    this.sprintAmount = THREE.MathUtils.smoothstep(
+      this.speed, MOVE.walkSpeed * 0.85, MOVE.sprintSpeed * 0.96
+    );
+    this.noiseLevel = this.speed < 0.16 ? 0 : this.speed < 4.4 ? 1 : 5;
+
+    // Audio steps are based on distance travelled, not FPS or a fixed timer.
+    // Shorter steps while walking, longer strides but far more steps/sec running.
+    const stride = THREE.MathUtils.lerp(1.09, 1.37, this.sprintAmount);
+    if (travelled > 0.0003) {
+      this.stepDistance += travelled;
+      this.stepPhase += travelled / stride * Math.PI;
+      while (this.stepDistance >= stride) {
+        this.stepDistance -= stride;
+        this.stepKick = Math.min(1.4, this.stepKick + 0.65 + this.sprintAmount * 0.4);
+        footstep(this.sprintAmount);
+      }
+    }
+    this.stepKick *= Math.exp(-dt * 17);
+    this.crashKick *= Math.exp(-dt * 10);
+
+    // Accelerating zooms toward 104 degrees. Braking snaps quickly back to 76.
+    const targetFov = MOVE.baseFov + (MOVE.sprintFov - MOVE.baseFov) *
+      Math.pow(this.sprintAmount, 0.78);
+    const fovSharpness = targetFov > this.camera.fov ? 5.5 : 13.5;
+    this.camera.fov += (targetFov - this.camera.fov) * (1 - Math.exp(-fovSharpness * dt));
+    if (Math.abs(targetFov - this.camera.fov) > 0.005) this.camera.updateProjectionMatrix();
+
+    // Body-relative lateral velocity and mouse-driven cornering both feed lean.
+    const sideways = this.velocity.x * cos - this.velocity.y * sin;
+    const turnRate = THREE.MathUtils.clamp(this.turnInput / Math.max(dt, 0.001), -5, 5);
+    this.turnInput = 0;
+    const targetRoll = THREE.MathUtils.clamp(
+      -sideways / MOVE.sprintSpeed * 0.12 +
+      turnRate * this.sprintAmount * 0.027,
+      -0.18, 0.18
+    );
+    this.roll += (targetRoll - this.roll) * (1 - Math.exp(-dt * 10));
+
+    // Sprint-only asymmetric, multi-frequency shake, footfall jolts and sway.
+    // Crucially these are VISUAL transforms: they cannot tunnel through walls.
+    const panic = Math.pow(this.sprintAmount, 1.55);
+    const t = elapsed, phase = this.stepPhase;
+    const gait = Math.sin(phase) * (0.011 + 0.055 * panic);
+    const heavy = Math.abs(Math.sin(phase * 0.5)) * (0.008 + 0.024 * panic);
+    const xShake = panic * (
+      0.037 * Math.sin(t * 17.7 + 0.9 * Math.sin(t * 4.2)) +
+      0.020 * Math.sin(t * 32.3 + 1.7)
+    );
+    const yShake = panic * (
+      0.039 * Math.sin(t * 23.7 + 0.4) +
+      0.026 * Math.sin(t * 37.1 + 2.1)
+    );
+    const pitchShake = panic * (
+      0.023 * Math.sin(t * 18.4 + 0.5) +
+      0.014 * Math.sin(t * 34.9 + 2.1)
+    ) + this.stepKick * 0.018 + this.crashKick * 0.058;
+    const yawShake = panic * (
+      0.014 * Math.sin(t * 20.8 + 0.2) +
+      0.011 * Math.sin(t * 31.1 + 1.8)
+    );
+    const rollShake = panic * (
+      0.027 * Math.sin(t * 16.8) +
+      0.017 * Math.sin(t * 28.9 + 1.1)
+    ) + this.crashKick * Math.sin(t * 32) * 0.042;
+
+    this.camera.position.set(
+      this.position.x + cos * xShake,
+      EYE + gait + heavy + yShake - this.stepKick * 0.032 - this.crashKick * 0.045,
+      this.position.y - sin * xShake
+    );
+    this.camera.rotation.set(
+      this.pitch + pitchShake,
+      this.yaw + yawShake,
+      this.roll + rollShake,
+      'YXZ'
+    );
+  }
+}
+
+const player = new PlayerController(camera);
+// Public for future AI integration: window.backroomsPlayer.noiseLevel
+window.backroomsPlayer = player;
+
+// ============================================================
+// CAPTAIN CLARK — ANIMATED, MOMENTUM-DRIVEN HUNTER
+// ============================================================
+
+/*
+  The uploaded rig is a GLB with "mixamorig:Bone_77"-style names.
+  The provided Mixamo FBX clips use unsuffixed "mixamorig:Bone" names.
+  We normalize BOTH to stable names so AnimationMixer actually binds.
+
+  Standing Melee Punch is the only supplied non-running animation.
+  For hunting, its first ~0.45 seconds become a slow mirrored motion
+  (subdued upper-body search). The complete clip is reserved for hits.
+  Fast Run is the pursuit animation. It is a visual loop, NOT locomotion.
+
+  Hips.position and any non-bone root position/scale tracks are discarded.
+  No animation is allowed to move the world-space monster container.
+*/
+
+const MONSTER = Object.freeze({
+  radius: 0.38,
+  huntSpeed: 1.22,
+  chaseSpeed: 9.42,          // faster in a straight line than player's 8.35
+  huntAcceleration: 7.8,
+  chaseAcceleration: 21.5,
+  huntTurnRate: 3.4,        // radians / second when slow
+  chaseTurnRate: 1.05,      // running creature CANNOT pivot sharply
+  lateralTraction: 0.75,    // very low side grip at speed: overshoots corners
+  passiveDrag: 1.05,
+  wallRestitution: 0.05,
+  hearingRadius: 49,
+  visionRadius: 22,
+  visionDot: -0.15,        // broad peripheral vision
+  contactRadius: 0.93,
+  rehomeRadius: 76,
+  alertPersistence: 8.5
+});
+
+const CELL_GLOBAL = (v) => Math.floor(v/CELL);
+const gridId=(x,z)=>`${x},${z}`;
+const localIndex=i=>((i%N)+N)%N;
+
+function navNeighbors(x,z) {
+  const cx=Math.floor(x/N), cz=Math.floor(z/N);
+  const lx=localIndex(x), lz=localIndex(z);
+  const c=chunks.get(key(cx,cz));
+  if(!c)return [];
+  const result=[];
+  // +X, -X, +Z, -Z; use the original room-generation wall-bay data.
+  for(const [dx,dz] of [[1,0],[-1,0],[0,1],[0,-1]]){
+    const nx=x+dx,nz=z+dz;
+    if(!chunks.has(key(Math.floor(nx/N),Math.floor(nz/N))))continue;
+    let open=false;
+    if(dx===1){
+      open=lx<N-1 ? !c.blocked.has(`v|${lx+1}|${lz}`) : lz===portalX(cx+1,cz);
+    }else if(dx===-1){
+      open=lx>0 ? !c.blocked.has(`v|${lx}|${lz}`) : lz===portalX(cx,cz);
+    }else if(dz===1){
+      open=lz<N-1 ? !c.blocked.has(`h|${lz+1}|${lx}`) : lx===portalZ(cx,cz+1);
+    }else{
+      open=lz>0 ? !c.blocked.has(`h|${lz}|${lx}`) : lx===portalZ(cx,cz);
+    }
+    if(open)result.push([nx,nz]);
+  }
+  return result;
+}
+
+// Navigation ONLY reads the already-built deterministic map. No generation changes.
+function findPath(ax,az,bx,bz,maxExpanded=550){
+  const sx=CELL_GLOBAL(ax),sz=CELL_GLOBAL(az);
+  const tx=CELL_GLOBAL(bx),tz=CELL_GLOBAL(bz);
+  if(sx===tx&&sz===tz)return [];
+  const start=gridId(sx,sz),goal=gridId(tx,tz);
+  const nodes=new Map([[start,{x:sx,z:sz,g:0,f:Math.abs(sx-tx)+Math.abs(sz-tz),prev:null}]]);
+  const open=new Set([start]),closed=new Set();
+  let visited=0;
+  while(open.size&&visited++<maxExpanded){
+    let bestKey=null,bestF=Infinity;
+    for(const id of open){let f=nodes.get(id).f;if(f<bestF){bestF=f;bestKey=id;}}
+    if(bestKey===goal){
+      const path=[];let id=bestKey;
+      while(id&&id!==start){
+        const n=nodes.get(id);
+        path.push(new THREE.Vector2((n.x+.5)*CELL,(n.z+.5)*CELL));
+        id=n.prev;
+      }
+      return path.reverse();
+    }
+    open.delete(bestKey);closed.add(bestKey);
+    const current=nodes.get(bestKey);
+    for(const [nx,nz] of navNeighbors(current.x,current.z)){
+      const id=gridId(nx,nz);
+      if(closed.has(id))continue;
+      const cost=current.g+1;
+      if(!nodes.has(id)||cost<nodes.get(id).g){
+        nodes.set(id,{x:nx,z:nz,g:cost,f:cost+Math.abs(nx-tx)+Math.abs(nz-tz),prev:bestKey});
+        open.add(id);
+      }
+    }
+  }
+  return [];
+}
+
+function lineOfSight(ax,az,bx,bz) {
+  // Slab intersection test against exactly the same wall boxes as movement.
+  const dx=bx-ax,dz=bz-az;
+  for(const c of chunks.values()){
+    if(Math.abs((c.cx+.5)*SIDE-(ax+bx)/2)>SIDE*2+Math.abs(dx)/2)continue;
+    if(Math.abs((c.cz+.5)*SIDE-(az+bz)/2)>SIDE*2+Math.abs(dz)/2)continue;
+    for(const b of c.colliders){
+      let lo=0,hi=1;
+      if(Math.abs(dx)<1e-8){if(ax<b.minX||ax>b.maxX)continue;}
+      else{
+        const a=(b.minX-ax)/dx, e=(b.maxX-ax)/dx;
+        lo=Math.max(lo,Math.min(a,e));hi=Math.min(hi,Math.max(a,e));
+      }
+      if(Math.abs(dz)<1e-8){if(az<b.minZ||az>b.maxZ)continue;}
+      else{
+        const a=(b.minZ-az)/dz,e=(b.maxZ-az)/dz;
+        lo=Math.max(lo,Math.min(a,e));hi=Math.min(hi,Math.max(a,e));
+      }
+      if(lo<=hi&&hi>=0&&lo<=1)return false;
+    }
+  }
+  return true;
+}
+
+const normalizeBoneName=s=>{
+  const raw=s.split('|').pop().split(':').pop();
+  return raw.replace(/^mixamorig:?/i,'').replace(/_\d+$/,'').replace(/[^a-z0-9]/gi,'').toLowerCase();
+};
+
+function retargetVisualClip(clip,boneMap,mode){
+  const tracks=[];
+  for(const track of clip.tracks){
+    const dot=track.name.lastIndexOf('.');
+    if(dot<0)continue;
+    const property=track.name.slice(dot+1);
+    const name=track.name.slice(0,dot);
+    const bone=boneMap.get(normalizeBoneName(name));
+    if(!bone)continue;
+    // HARD ROOT-MOTION LOCK: no positional / scale channels whatsoever.
+    // Hips stays at its GLB bind position; world position is JS physics only.
+    if(property!=='quaternion')continue;
+    const copy=track.clone();
+    copy.name=`${bone.name}.quaternion`;
+    tracks.push(copy);
+  }
+  const output=new THREE.AnimationClip(mode,clip.duration,tracks);
+  output.resetDuration();
+  return output;
+}
+
+function loadFBX(url){
+  return new Promise((resolve,reject)=>{
+    new FBXLoader().load(url,resolve,undefined,reject);
+  });
+}
+
+class Monster {
+  constructor(){
+    this.position=new THREE.Vector2((1*N+3.5)*CELL,3.5*CELL);
+    this.velocity=new THREE.Vector2();
+    this.yaw=Math.PI;
+    this.state='HUNT';
+    this.alert=0;
+    this.target=this.position.clone();
+    this.path=[];
+    this.pathAge=0;
+    this.senseAge=0;
+    this.patrolAge=0;
+    this.lastVisible=false;
+    this.lastHeard=false;
+    this.speed=0;
+    this.hitCooldown=0;
+    this.mesh=null;
+    this.mixer=null;
+    this.actions={};
+    this.activeAction=null;
+    this.loaded=false;
+    // Captain Clark is not active until summoned, so the player chooses when the chase begins.
+    this.active=false;
+    this.spawnGrace=0;
+    this.visualHolder=new THREE.Group();
+    this.visualHolder.visible=false;
+    this.visualHolder.position.set(this.position.x,0,this.position.y);
+    scene.add(this.visualHolder);
+    this.footPhase=0;
+    this.impact=0;
+    this.random=rng(49217);
+    this.load();
+  }
+
+  async load(){
+    try{
+      const gltf=await new GLTFLoader().loadAsync(ASSETS.model);
+      const visual=gltf.scene;
+      // All world-space movement belongs to visualHolder, NOT the rig.
+      const boneMap=new Map();
+      visual.traverse(object=>{
+        if(object.isBone){
+          const normalized=normalizeBoneName(object.name);
+          // Prevent AnimationMixer binding failures on GLB's export suffixes.
+          object.name='Clark_'+normalized;
+          boneMap.set(normalized,object);
+        }
+        if(object.isMesh){
+          object.frustumCulled=false; // conservative for large animated poses
+          object.castShadow=false;
+          object.receiveShadow=false;
+          const darkness=material=>{
+            const m=material.clone();
+            if(m.color)m.color.multiplyScalar(0.68);
+            if('roughness' in m)m.roughness=Math.max(.88,m.roughness);
+            if('metalness' in m)m.metalness=0;
+            return m;
+          };
+          object.material=Array.isArray(object.material)
+            ?object.material.map(darkness):darkness(object.material);
+        }
+      });
+      visual.updateMatrixWorld(true);
+      // Rig is ~1.52m tall. Bring it to an ominous ~2.20m silhouette.
+      const bounds=new THREE.Box3().setFromObject(visual);
+      const size=new THREE.Vector3();bounds.getSize(size);
+      const scale=2.18/Math.max(.2,size.y);
+      const pivot=new THREE.Group();
+      visual.scale.multiplyScalar(scale);
+      visual.position.y-=bounds.min.y*scale;
+      pivot.add(visual);
+      // Mixamo forward is commonly -Z; align it with JS heading +Z.
+      pivot.rotation.y=Math.PI;
+      this.visualHolder.add(pivot);
+      this.mesh=visual;
+      this.pivot=pivot;
+      this.mixer=new THREE.AnimationMixer(visual);
+
+      const animationResults=await Promise.allSettled([
+        loadFBX(ASSETS.hunt),loadFBX(ASSETS.chase)
+      ]);
+      const [huntResult,runResult]=animationResults;
+      if(huntResult.status==='fulfilled'){
+        const source=huntResult.value.animations[0];
+        if(source){
+          const punch=retargetVisualClip(source,boneMap,'HUNT_PUNCH');
+          if(punch.tracks.length){
+            // Ambient hunting: take a small slice from the supplied punch
+            // and play it as a slow, ping-pong-ready search gesture.
+            const clip=THREE.AnimationUtils.subclip(punch,'HUNT',0,Math.min(16,Math.floor(punch.duration*30)),30);
+            this.actions.hunt=this.mixer.clipAction(clip);
+            this.actions.hunt.setLoop(THREE.LoopPingPong,Infinity);
+            this.actions.hunt.timeScale=.62;
+            this.actions.attack=this.mixer.clipAction(punch);
+            this.actions.attack.setLoop(THREE.LoopOnce,1);
+            this.actions.attack.clampWhenFinished=true;
+          }
+        }
+      }else console.warn('Could not load hunting FBX:',huntResult.reason);
+      if(runResult.status==='fulfilled'){
+        const source=runResult.value.animations[0];
+        if(source){
+          const run=retargetVisualClip(source,boneMap,'CHASE_RUN');
+          if(run.tracks.length){
+            this.actions.run=this.mixer.clipAction(run);
+            this.actions.run.setLoop(THREE.LoopRepeat,Infinity);
+            this.actions.run.timeScale=1;
+          }
+        }
+      }else console.warn('Could not load run FBX:',runResult.reason);
+      this.loaded=true;
+      this.switchAnimation('hunt',0);
+      spawnInMenu.disabled=false;
+      spawnInfo.textContent='READY · SUMMON HERE OR PRESS B IN-GAME';
+      console.info('Captain Clark ready:',Object.keys(this.actions).join(', '));
+    }catch(error){
+      console.error('Captain Clark model failed:',error);
+      spawnInfo.textContent='MODEL ERROR · USE THE COMPLETE ZIP VIA LOCALHOST';
+      document.getElementById('notice').textContent='MONSTER ASSET ERROR · SERVE THE INCLUDED FILES OVER LOCALHOST';
+    }
+  }
+
+  switchAnimation(name,fade=.26){
+    const next=this.actions[name];
+    if(!next||next===this.activeAction)return;
+    next.reset();
+    next.enabled=true;
+    next.setEffectiveWeight(1);
+    next.play();
+    if(this.activeAction)this.activeAction.fadeOut(fade);
+    next.fadeIn(fade);
+    this.activeAction=next;
+  }
+
+  choosePatrol(){
+    // Picks reachable random grid bays near its current position.
+    const baseX=CELL_GLOBAL(this.position.x),baseZ=CELL_GLOBAL(this.position.y);
+    for(let attempt=0;attempt<25;attempt++){
+      const gx=baseX+Math.floor((this.random()-.5)*13);
+      const gz=baseZ+Math.floor((this.random()-.5)*13);
+      const x=(gx+.5)*CELL,z=(gz+.5)*CELL;
+      if(!chunks.has(key(Math.floor(gx/N),Math.floor(gz/N))))continue;
+      if(collides(x,z,MONSTER.radius+.08))continue;
+      const path=findPath(this.position.x,this.position.y,x,z);
+      if(path.length>2){this.target.set(x,z);this.path=path;this.pathAge=.4;return;}
+    }
+  }
+
+  sense(dt){
+    this.senseAge-=dt;
+    if(this.senseAge>0)return;
+    this.senseAge=.10;
+    const dx=player.position.x-this.position.x;
+    const dz=player.position.y-this.position.y;
+    const d=Math.hypot(dx,dz);
+    const facing=(Math.sin(this.yaw)*dx+Math.cos(this.yaw)*dz)/(d||1);
+    const visible=d<MONSTER.visionRadius&&facing>MONSTER.visionDot&&
+      lineOfSight(this.position.x,this.position.y,player.position.x,player.position.y);
+    // The noiseLevel hook is THE hearing signal: sprinting=5, walk=1, still=0.
+    const loud=player.noiseLevel>=5&&d<MONSTER.hearingRadius;
+    this.lastVisible=visible;
+    this.lastHeard=loud;
+    if(loud||visible){
+      this.alert=MONSTER.alertPersistence;
+      // Captures current sound origin; updates while it can still hear.
+      this.target.copy(player.position);
+      this.state='CHASE';
+      this.pathAge=0;
+    }
+  }
+
+  rehome(){
+    // Only relocate when VERY far away; use hidden/off-screen cells.
+    // This ensures the monster can pursue in the streamed world forever.
+    for(let attempt=0;attempt<70;attempt++){
+      const angle=this.random()*Math.PI*2;
+      const distance=25+this.random()*20;
+      const x=Math.floor((player.position.x+Math.cos(angle)*distance)/CELL)*CELL+CELL/2;
+      const z=Math.floor((player.position.y+Math.sin(angle)*distance)/CELL)*CELL+CELL/2;
+      if(!chunks.has(key(Math.floor(x/SIDE),Math.floor(z/SIDE))))continue;
+      if(collides(x,z,MONSTER.radius+.1))continue;
+      if(lineOfSight(x,z,player.position.x,player.position.y))continue;
+      this.position.set(x,z);
+      this.velocity.set(0,0);
+      this.path=[];this.pathAge=0;this.alert=0;this.state='HUNT';
+      return;
+    }
+  }
+
+  update(dt,elapsed){
+    if(!this.loaded||!this.active||!playing)return;
+    // Two seconds to see the newly spawned figure before it starts hunting.
+    // Keep rig animation moving, but do not move the physical monster yet.
+    if(this.spawnGrace>0){
+      this.spawnGrace=Math.max(0,this.spawnGrace-dt);
+      this.switchAnimation('hunt');
+      if(this.mixer)this.mixer.update(dt);
+      return;
+    }
+    let dPlayer=this.position.distanceTo(player.position);
+    if(dPlayer>MONSTER.rehomeRadius)this.rehome();
+    this.sense(dt);
+    this.alert=Math.max(0,this.alert-dt);
+    this.hitCooldown=Math.max(0,this.hitCooldown-dt);
+    if(this.state==='CHASE'&&this.alert<=0){
+      this.state='HUNT';this.path=[];this.patrolAge=0;
+    }
+    if(this.state==='HUNT'){
+      this.patrolAge-=dt;
+      if(this.patrolAge<=0||this.position.distanceTo(this.target)<1){
+        this.choosePatrol();this.patrolAge=3+this.random()*4;
+      }
+    }
+
+    // A* paths only traverse openings in the original chunk graph.
+    // Recalculate frequently while chasing, rarely while hunting.
+    this.pathAge-=dt;
+    if(this.pathAge<=0){
+      if(this.state==='CHASE'){
+        this.path=findPath(this.position.x,this.position.y,this.target.x,this.target.y);
+        this.pathAge=.20;
+      }else{
+        this.path=findPath(this.position.x,this.position.y,this.target.x,this.target.y);
+        this.pathAge=1.0;
+      }
+    }
+    while(this.path.length&&this.position.distanceTo(this.path[0])<.8)this.path.shift();
+
+    let steering=this.path.length?this.path[0]:this.target;
+    const distanceToGoal=this.position.distanceTo(steering);
+    const directPlayer=this.state==='CHASE'&&this.lastVisible&&
+      lineOfSight(this.position.x,this.position.y,player.position.x,player.position.y);
+    if(directPlayer)steering=player.position;
+    const dx=steering.x-this.position.x,dz=steering.y-this.position.y;
+    const distance=Math.hypot(dx,dz);
+    const desiredYaw=distance>.01?Math.atan2(dx,dz):this.yaw;
+    const yawDelta=Math.atan2(Math.sin(desiredYaw-this.yaw),Math.cos(desiredYaw-this.yaw));
+    const speedBefore=this.velocity.length();
+    const chasing=this.state==='CHASE';
+
+    // Low turn rate at high velocity. This is what makes ankle-break dodges work.
+    const highSpeed=THREE.MathUtils.smoothstep(speedBefore,2.5,MONSTER.chaseSpeed);
+    const maxTurn=chasing
+      ?THREE.MathUtils.lerp(2.65,MONSTER.chaseTurnRate,highSpeed)
+      :MONSTER.huntTurnRate;
+    this.yaw+=THREE.MathUtils.clamp(yawDelta,-maxTurn*dt,maxTurn*dt);
+
+    const forward=new THREE.Vector2(Math.sin(this.yaw),Math.cos(this.yaw));
+    const maxSpeed=chasing?MONSTER.chaseSpeed:MONSTER.huntSpeed;
+    const thrust=chasing?MONSTER.chaseAcceleration:MONSTER.huntAcceleration;
+    // Engine thrust pushes FORWARD, never toward a teleporting target vector.
+    this.velocity.addScaledVector(forward,thrust*dt);
+    // Dissipate side slip slowly: damp carpet with very little grip at speed.
+    const lateral=new THREE.Vector2(-forward.y,forward.x);
+    const sideways=this.velocity.dot(lateral);
+    this.velocity.addScaledVector(lateral,-sideways*(1-Math.exp(-MONSTER.lateralTraction*dt)));
+    this.velocity.multiplyScalar(Math.exp(-MONSTER.passiveDrag*dt*.12));
+    if(this.velocity.length()>maxSpeed)this.velocity.setLength(maxSpeed);
+    if(!chasing&&distanceToGoal<1.4)this.velocity.multiplyScalar(Math.exp(-3*dt));
+
+    // Collision integration matches the player's stepped, sliding wall physics.
+    const steps=Math.max(1,Math.ceil(this.velocity.length()*dt/MOVE.maxMoveStep));
+    const subdt=dt/steps;
+    let maxImpact=0;
+    for(let i=0;i<steps;i++){
+      const vx=this.velocity.x,vz=this.velocity.y;
+      if(!collides(this.position.x+vx*subdt,this.position.y,MONSTER.radius)){
+        this.position.x+=vx*subdt;
+      }else{
+        maxImpact=Math.max(maxImpact,Math.abs(vx));
+        this.velocity.x=-vx*MONSTER.wallRestitution;
+      }
+      if(!collides(this.position.x,this.position.y+vz*subdt,MONSTER.radius)){
+        this.position.y+=vz*subdt;
+      }else{
+        maxImpact=Math.max(maxImpact,Math.abs(vz));
+        this.velocity.y=-vz*MONSTER.wallRestitution;
+      }
+    }
+    if(maxImpact>3)this.impact=Math.min(1,maxImpact/9);
+    this.impact*=Math.exp(-dt*9);
+    this.speed=this.velocity.length();
+    this.visualHolder.position.set(this.position.x,0,this.position.y);
+    this.visualHolder.rotation.y=this.yaw;
+    if(this.pivot){
+      // Purely cosmetic off-balance motion following heavy impacts.
+      this.pivot.rotation.z=Math.sin(elapsed*2.1)*.015+this.impact*.065;
+    }
+    if(this.mixer){
+      const run=this.actions.run;
+      if(chasing&&run){
+        this.switchAnimation('run');
+        run.timeScale=Math.max(.65,Math.min(1.75,this.speed/6.5));
+      }else this.switchAnimation('hunt');
+      this.mixer.update(dt);
+    }
+    dPlayer=this.position.distanceTo(player.position);
+    if(dPlayer<MONSTER.contactRadius&&this.hitCooldown<=0&&this.state==='CHASE'){
+      this.hitCooldown=3;
+      onMonsterCaught();
+    }
+  }
+}
+
+const monster=new Monster();
+window.backroomsMonster=monster;
+
+// ============================================================
+// MANUAL SUMMON BUTTON / HOTKEY
+// ============================================================
+/*
+  Spawn (or move the same existing monster) approximately 4.5 meters
+  directly in front of the player's PHYSICAL viewpoint, not the shaking
+  camera. Test the actual monster collision radius and demand an unobstructed
+  line of sight: summoning never places it inside a wall or in another room.
+
+  This changes NO room-generation, navigation, or momentum code. Press B
+  during pointer-locked gameplay; the button is clickable in the pause menu.
+*/
+function summonMonster(){
+  if(!monster.loaded){
+    spawnInfo.textContent='CAPTAIN CLARK IS STILL LOADING...';
+    return false;
+  }
+  if(isCaught)return false;
+
+  updateChunks(false,player.position.x,player.position.y);
+
+  // Prefer directly ahead, moving closer or slightly to either side only
+  // if architecture makes the desired position unsafe.
+  const distances=[4.5,4.0,3.5,3.0,2.65];
+  const offsets=[0,-0.14,0.14,-0.29,0.29,-0.43,0.43];
+  let spot=null;
+  for(const angle of offsets){
+    for(const distance of distances){
+      const look=player.yaw+angle;
+      // Three.js camera -Z is forward in this yaw convention.
+      const x=player.position.x-Math.sin(look)*distance;
+      const z=player.position.y-Math.cos(look)*distance;
+      if(collides(x,z,MONSTER.radius+.14))continue;
+      if(!lineOfSight(player.position.x,player.position.y,x,z))continue;
+      spot={x,z};
+      break;
+    }
+    if(spot)break;
+  }
+
+  if(!spot){
+    spawnInfo.textContent='NO CLEAR FLOOR AHEAD · FACE AN OPEN ROOM';
+    showSummonToast('NO CLEAR SPACE AHEAD');
+    return false;
+  }
+
+  // Respawn the SAME entity: never create clones or a second mixer.
+  monster.position.set(spot.x,spot.z);
+  monster.visualHolder.position.set(spot.x,0,spot.z);
+  monster.visualHolder.visible=true;
+  monster.active=true;
+  monster.velocity.set(0,0);
+  monster.speed=0;
+  monster.yaw=Math.atan2(player.position.x-spot.x,player.position.y-spot.z);
+  monster.visualHolder.rotation.y=monster.yaw;
+  monster.target.copy(player.position);
+  monster.path=[];
+  monster.pathAge=0;
+  monster.senseAge=0;
+  monster.patrolAge=0;
+  monster.hitCooldown=0;
+  monster.alert=0;
+  monster.lastVisible=false;
+  monster.lastHeard=false;
+  monster.impact=0;
+  monster.state='HUNT';
+  monster.spawnGrace=2.0;
+  if(monster.pivot)monster.pivot.rotation.z=0;
+  monster.switchAnimation('hunt',.12);
+  spawnInfo.textContent='CAPTAIN CLARK SUMMONED · CLICK TO ENTER';
+  showSummonToast('CAPTAIN CLARK SUMMONED');
+  return true;
+}
+
+const summonToast=document.createElement('div');
+summonToast.setAttribute('aria-live','polite');
+Object.assign(summonToast.style,{
+  position:'fixed',bottom:'75px',right:'24px',zIndex:'6',
+  color:'#f1deb1',font:'11px monospace',letterSpacing:'2px',
+  textShadow:'0 1px 5px #241f0f',pointerEvents:'none',opacity:'0',
+  transition:'opacity .2s'
+});
+document.body.appendChild(summonToast);
+let summonToastTimer=0;
+function showSummonToast(text){
+  summonToast.textContent=text;
+  summonToast.style.opacity='1';
+  clearTimeout(summonToastTimer);
+  summonToastTimer=setTimeout(()=>summonToast.style.opacity='0',1700);
+}
+
+spawnInMenu.addEventListener('click',event=>{
+  // Do not let the menu's click-to-enter handler swallow the summon button.
+  event.preventDefault();
+  event.stopPropagation();
+  summonMonster();
+});
+
+const caughtElement=document.getElementById('caught');
+let isCaught=false;
+function onMonsterCaught(){
+  if(isCaught)return;
+  isCaught=true;
+  postMat.uniforms.uStrike.value=1;
+  caughtElement.classList.add('visible');
+  document.exitPointerLock?.();
+}
+caughtElement.addEventListener('click',()=>{
+  isCaught=false;
+  caughtElement.classList.remove('visible');
+  postMat.uniforms.uStrike.value=0;
+  // Restart without regenerating or altering the world layout.
+  player.position.set(SIDE/2,SIDE/2);
+  player.velocity.set(0,0);player.noiseLevel=0;
+  player.yaw=.12;player.pitch=-.035;player.pause();
+  monster.active=false;
+  monster.visualHolder.visible=false;
+  monster.spawnGrace=0;
+  monster.velocity.set(0,0);monster.path=[];monster.alert=0;
+  monster.state='HUNT';monster.patrolAge=0;
+  spawnInfo.textContent='READY · SUMMON HERE OR PRESS B IN-GAME';
+  lock();
+});
+
+// ============================================================
+// POINTER LOCK / INPUT
+// ============================================================
+
+function lock() {
+  createAudio();
+  renderer.domElement.requestPointerLock();
+}
+entry.addEventListener('click', lock);
+document.addEventListener('pointerlockchange', () => {
+  playing = document.pointerLockElement === renderer.domElement;
+  entry.classList.toggle('hidden', playing || isCaught);
+  if (!playing) { held.clear(); player.pause(); }
+  document.getElementById('start').textContent = playing ? '' : 'CLICK TO RESUME';
+});
+document.addEventListener('mousemove', e => {
+  if (playing) player.look(e.movementX, e.movementY);
+});
+document.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) e.preventDefault();
+  held.add(k);
+  if (k === 'm' && !e.repeat) muted = !muted;
+  if (k === 'b' && !e.repeat && playing) summonMonster();
+});
+document.addEventListener('keyup', e => held.delete(e.key.toLowerCase()));
+addEventListener('blur', () => held.clear());
+
+// ============================================================
+// MAIN GAME LOOP
+// ============================================================
+
+const clock = new THREE.Clock();
+let elapsed = 0;
+updateChunks(true, player.position.x, player.position.y);
+// The monster is inactive until the summon button or B is used.
+// No monster spawn logic alters any generated walls, portals, or pillars.
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  elapsed += dt;
+
+  if (playing) {
+    // Load first, because collision may query chunks when crossing a border.
+    updateChunks(false, player.position.x, player.position.y);
+    player.update(dt, elapsed);
+    updateChunks(false, player.position.x, player.position.y);
+    monster.update(dt, elapsed);
+  }
+
+  const enemyDistance=monster.position.distanceTo(player.position);
+  const targetThreat=monster.loaded && monster.active && !isCaught
+    ?Math.pow(THREE.MathUtils.clamp((12-enemyDistance)/11,0,1),2)
+    :0;
+  postMat.uniforms.uThreat.value=THREE.MathUtils.damp(
+    postMat.uniforms.uThreat.value,targetThreat,9,dt
+  );
+  if(isCaught)postMat.uniforms.uStrike.value=1;
+
+  updateLighting(dt, elapsed);
+  updateAudio(player.speed, playing);
+  timecode.textContent = new Date(Math.floor(elapsed) * 1000).toISOString().slice(11, 19);
+  status.textContent = 'LEVEL 0  /  ' + (playing ? 'NO SIGNAL' : 'PAUSED');
+
+  postMat.uniforms.uTime.value = elapsed;
+  renderer.setRenderTarget(target);
+  renderer.render(scene, camera);
+  renderer.setRenderTarget(null);
+  renderer.render(postScene, postCamera);
+}
+animate();
+</script>
+</body>
+</html>
